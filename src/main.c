@@ -166,6 +166,9 @@ static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform sys
   }
 
   platform_stop(system);
+
+  if (connection_error != ML_ERROR_GRACEFUL_TERMINATION)
+    exit(1);
 }
 
 static void help() {

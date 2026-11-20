@@ -29,12 +29,14 @@
 
 pthread_t main_thread_id = 0;
 bool connection_debug;
+int connection_error = ML_ERROR_GRACEFUL_TERMINATION;
 ConnListenerRumble rumble_handler = NULL;
 ConnListenerRumbleTriggers rumble_triggers_handler = NULL;
 ConnListenerSetMotionEventState set_motion_event_state_handler = NULL;
 ConnListenerSetControllerLED set_controller_led_handler = NULL;
 
 static void connection_terminated(int errorCode) {
+  connection_error = errorCode;
   switch (errorCode) {
   case ML_ERROR_GRACEFUL_TERMINATION:
     printf("Connection has been terminated gracefully.\n");

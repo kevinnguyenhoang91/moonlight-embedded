@@ -87,7 +87,7 @@ if ! echo "$APPS" | grep -q "^1\. "; then
 fi
 
 APP="$(conf_value app)"
-if ! echo "$APPS" | sed -n 's/^[0-9]*\. //p' | grep -qxF "$APP"; then
+if ! echo "$APPS" | sed -n 's/^[0-9]*\. //p' | grep -qxF -- "$APP"; then
   pm_show_error "App \"$APP\" not found on the PC.\nSet app = <name> in moonlight.conf. Available:\n$(echo "$APPS" | sed -n 's/^[0-9]*\. //p' | head -n 8)" --title "Moonlight"
   pm_finish
   exit 1
@@ -96,11 +96,11 @@ fi
 pm_platform_helper "$MOONLIGHT"
 
 # Default stream size is the native panel resolution (960x720 on 4:3 panels, 720x720 on square ones).
-# stderr is captured for the error card; stdout keeps going to the log.
-{ STREAM_ERR="$(moonlight stream -platform sdl -width "$DISPLAY_WIDTH" -height "$DISPLAY_HEIGHT" 2>&1 1>&3 3>&-)"; STATUS=$?; } 3>&1
-echo "$STREAM_ERR"
+# stdout and stderr both go to the log as they arrive and are kept for the error card,
+# minus the "Stopping/Cleaning up ...done" teardown lines that follow the real error.
+{ STREAM_OUT="$(set -o pipefail; moonlight stream -platform sdl -width "$DISPLAY_WIDTH" -height "$DISPLAY_HEIGHT" 2>&1 | tee /dev/fd/3)"; STATUS=$?; } 3>&1
 if [ $STATUS -ne 0 ]; then
-  pm_show_error "Stream ended with an error:\n$(echo "$STREAM_ERR" | tail -n 2)" --title "Moonlight"
+  pm_show_error "Stream ended with an error:\n$(echo "$STREAM_OUT" | grep -vE '\.\.\.(done)?$' | tail -n 2)" --title "Moonlight"
 fi
 
 pm_finish

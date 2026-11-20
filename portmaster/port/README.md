@@ -67,8 +67,10 @@ In `ports/moonlightembedded/` copy `moonlight.conf.default` to `moonlight.conf`
 and edit it:
 
 ```
-address = 192.168.1.50     # your PC's IP (remove the leading #)
-app = Desktop              # exact app name in Sunshine
+# your PC's IP (remove the leading # from the address line)
+address = 192.168.1.50
+# exact app name in Sunshine
+app = Desktop
 ```
 
 Default Sunshine apps: `Desktop`, `Low Res Desktop`, `Steam Big Picture`.
