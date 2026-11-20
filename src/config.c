@@ -46,6 +46,7 @@ bool inputAdded = false;
 
 static struct option long_options[] = {
   {"720", no_argument, NULL, 'a'},
+  {"960x720", no_argument, NULL, 'A'},
   {"1080", no_argument, NULL, 'b'},
   {"4k", no_argument, NULL, '0'},
   {"width", required_argument, NULL, 'c'},
@@ -135,6 +136,10 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
   switch (c) {
   case 'a':
     config->stream.width = 1280;
+    config->stream.height = 720;
+    break;
+  case 'A':
+    config->stream.width = 960;
     config->stream.height = 720;
     break;
   case 'b':

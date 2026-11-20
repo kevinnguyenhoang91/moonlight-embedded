@@ -60,6 +60,10 @@ Save the configuration provided by the options on the command line and all loade
 Use the resolution 1280x720 for streaming.
 This is the default option.
 
+=item B<-960x720>
+
+Use the 4:3 resolution 960x720 for streaming.
+
 =item B<-1080>
 
 Use the resolution 1920x1080 for streaming.
