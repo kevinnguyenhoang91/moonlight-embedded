@@ -166,6 +166,9 @@ static void stream(PSERVER_DATA server, PCONFIGURATION config, enum platform sys
   }
 
   platform_stop(system);
+
+  if (connection_error != ML_ERROR_GRACEFUL_TERMINATION)
+    exit(1);
 }
 
 static void help() {
@@ -191,6 +194,7 @@ static void help() {
   printf("\t-debug\t\t\tEnable verbose and debug output\n");
   printf("\n Streaming options\n\n");
   printf("\t-720\t\t\tUse 1280x720 resolution [default]\n");
+  printf("\t-960x720\t\tUse 960x720 resolution (4:3)\n");
   printf("\t-1080\t\t\tUse 1920x1080 resolution\n");
   printf("\t-4k\t\t\tUse 3840x2160 resolution\n");
   printf("\t-width <width>\t\tHorizontal resolution (default 1280)\n");

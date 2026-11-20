@@ -1,0 +1,27 @@
+{
+    "version": 2,
+    "name": "moonlightembedded.zip",
+    "items": [
+        "Moonlight Embedded.sh",
+        "moonlightembedded"
+    ],
+    "items_opt": null,
+    "attr": {
+        "title": "Moonlight Embedded",
+        "desc": "Stream games from a PC running Sunshine. Streams at the device's native resolution by default, including 960x720 (4:3) and 720x720 panels.",
+        "inst": "Set address = <PC IP> in ports/moonlightembedded/moonlight.conf, launch, then enter the on-screen PIN in Sunshine's web UI.",
+        "genres": [
+            "other"
+        ],
+        "porter": [
+            "moonlight-stream"
+        ],
+        "image": {},
+        "rtr": true,
+        "runtime": null,
+        "reqs": [],
+        "arch": [
+            "aarch64"
+        ]
+    }
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<gameList>
+  <game>
+    <path>./Moonlight Embedded.sh</path>
+    <name>Moonlight Embedded</name>
+    <desc>Stream games from a PC running Sunshine at the handheld's native screen resolution.</desc>
+    <developer>Moonlight Game Streaming Project</developer>
+    <publisher>Moonlight Game Streaming Project</publisher>
+    <genre>Other</genre>
+  </game>
+</gameList>
