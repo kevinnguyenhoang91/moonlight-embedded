@@ -422,26 +422,26 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
     else
       snprintf(config->key_dir, sizeof(config->key_dir), "%s" DEFAULT_CACHE_DIR MOONLIGHT_PATH, pw->pw_dir);
   }
+}
 
-  if (config->stream.bitrate == -1) {
-    // This table prefers 16:10 resolutions because they are
-    // only slightly more pixels than the 16:9 equivalents, so
-    // we don't want to bump those 16:10 resolutions up to the
-    // next 16:9 slot.
+int config_default_bitrate(int width, int height, int fps) {
+  // This table prefers 16:10 resolutions because they are
+  // only slightly more pixels than the 16:9 equivalents, so
+  // we don't want to bump those 16:10 resolutions up to the
+  // next 16:9 slot.
 
-    if (config->stream.width * config->stream.height <= 640 * 360) {
-      config->stream.bitrate = (int)(1000 * (config->stream.fps / 30.0));
-    } else if (config->stream.width * config->stream.height <= 854 * 480) {
-      config->stream.bitrate = (int)(1500 * (config->stream.fps / 30.0));
-    } else if (config->stream.width * config->stream.height <= 1366 * 768) {
-      // This covers 1280x720 and 1280x800 too
-      config->stream.bitrate = (int)(5000 * (config->stream.fps / 30.0));
-    } else if (config->stream.width * config->stream.height <= 1920 * 1200) {
-      config->stream.bitrate = (int)(10000 * (config->stream.fps / 30.0));
-    } else if (config->stream.width * config->stream.height <= 2560 * 1600) {
-      config->stream.bitrate = (int)(20000 * (config->stream.fps / 30.0));
-    } else /* if (config->stream.width * config->stream.height <= 3840 * 2160) */ {
-      config->stream.bitrate = (int)(40000 * (config->stream.fps / 30.0));
-    }
+  if (width * height <= 640 * 360) {
+    return (int)(1000 * (fps / 30.0));
+  } else if (width * height <= 854 * 480) {
+    return (int)(1500 * (fps / 30.0));
+  } else if (width * height <= 1366 * 768) {
+    // This covers 1280x720 and 1280x800 too
+    return (int)(5000 * (fps / 30.0));
+  } else if (width * height <= 1920 * 1200) {
+    return (int)(10000 * (fps / 30.0));
+  } else if (width * height <= 2560 * 1600) {
+    return (int)(20000 * (fps / 30.0));
+  } else /* if (width * height <= 3840 * 2160) */ {
+    return (int)(40000 * (fps / 30.0));
   }
 }

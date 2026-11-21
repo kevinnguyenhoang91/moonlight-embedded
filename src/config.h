@@ -17,6 +17,8 @@
  * along with Moonlight; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 #include <Limelight.h>
 
 #include <stdbool.h>
@@ -54,3 +56,5 @@ extern bool inputAdded;
 
 bool config_file_parse(char* filename, PCONFIGURATION config);
 void config_parse(int argc, char* argv[], PCONFIGURATION config);
+// Bitrate in kbps used when none is configured (stream.bitrate == -1)
+int config_default_bitrate(int width, int height, int fps);

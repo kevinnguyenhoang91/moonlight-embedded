@@ -11,6 +11,21 @@ Usage: I<moonlight> E<lt>actionE<gt> [options] [host] [-port E<lt>numberE<gt>]
 
 =over 4
 
+=item B<ui>
+
+Open a gamepad-friendly launcher (requires SDL): a bottom menu with
+Settings, Play and Connect. Connect pairs with the host (the PIN is shown on
+screen), sets the host IP address with an on-screen number pad and reloads the
+app list. Settings picks resolution, bitrate, frame rate, codec, remote
+optimizations, sound effects and theme. Play starts the selected app; when the
+stream ends the launcher comes back. Navigate with the D-pad or arrow keys,
+A/Enter selects, B/Escape goes back, L1+R1 (or Escape in the main menu) quits.
+
+Launcher choices are stored in F<launcher.conf> in the key directory and
+override the configuration file and command line. Other options (for example
+B<-platform>, B<-quitappafter>, B<-localaudio>) apply to every stream started
+from the launcher.
+
 =item B<pair>
 
 Pair this computer with the host.

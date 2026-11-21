@@ -45,6 +45,10 @@ static size_t _write_curl(void *contents, size_t size, size_t nmemb, void *userp
 }
 
 int http_init(const char* keyDirectory, int logLevel) {
+  // gs_init() may run more than once per process (e.g. the launcher reconnecting)
+  if (curl)
+    curl_easy_cleanup(curl);
+
   curl = curl_easy_init();
   debug = logLevel >= 2;
   if (!curl)
@@ -66,6 +70,9 @@ int http_init(const char* keyDirectory, int logLevel) {
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _write_curl);
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
   curl_easy_setopt(curl, CURLOPT_SSL_SESSIONID_CACHE, 0L);
+  // An unreachable address would otherwise block for the OS TCP timeout (minutes).
+  // Only limits connecting: pairing still waits as long as the user needs for the PIN.
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
 
   return GS_OK;
 }

@@ -35,6 +35,7 @@
 #endif
 #ifdef HAVE_SDL
 #include "input/sdl.h"
+#include "ui.h"
 #endif
 
 #include <Limelight.h>
@@ -42,6 +43,7 @@
 #include <client.h>
 #include <discover.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -49,6 +51,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -180,6 +183,7 @@ static void help() {
   printf("Usage: moonlight [action] (options) [host] [-port <number>]\n");
   printf("       moonlight [configfile]\n");
   printf("\n Actions\n\n");
+  printf("\tui\t\t\tLauncher to pair, pick settings and apps with a gamepad (SDL)\n");
   printf("\tpair\t\t\tPair device with computer\n");
   printf("\tunpair\t\t\tUnpair device with computer\n");
   printf("\tstream\t\t\tStream computer to device\n");
@@ -239,6 +243,177 @@ static void pair_check(PSERVER_DATA server) {
   }
 }
 
+static void stream_session(PSERVER_DATA server, PCONFIGURATION config) {
+  pair_check(server);
+  enum platform system = platform_check(config->platform);
+  if (config->debug_level > 0)
+    printf("Platform %s\n", platform_name(system));
+
+  if (system == 0) {
+    fprintf(stderr, "Platform '%s' not found\n", config->platform);
+    exit(-1);
+  } else if (system == SDL && config->audio_device != NULL) {
+    fprintf(stderr, "You can't select a audio device for SDL\n");
+    exit(-1);
+  }
+
+  if (config->stream.bitrate == -1)
+    config->stream.bitrate = config_default_bitrate(config->stream.width, config->stream.height, config->stream.fps);
+
+  config->stream.supportedVideoFormats = VIDEO_FORMAT_H264;
+  if (config->codec == CODEC_HEVC || (config->codec == CODEC_UNSPECIFIED && platform_prefers_codec(system, CODEC_HEVC))) {
+    config->stream.supportedVideoFormats |= VIDEO_FORMAT_H265;
+    if (config->hdr)
+      config->stream.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
+  }
+  if (config->codec == CODEC_AV1 || (config->codec == CODEC_UNSPECIFIED && platform_prefers_codec(system, CODEC_AV1))) {
+    config->stream.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
+    if (config->hdr)
+      config->stream.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
+  }
+
+  if (config->hdr && !(config->stream.supportedVideoFormats & VIDEO_FORMAT_MASK_10BIT)) {
+    fprintf(stderr, "HDR streaming requires HEVC or AV1 codec\n");
+    exit(-1);
+  }
+
+  #ifdef HAVE_SDL
+  if (system == SDL)
+    sdl_init(config->stream.width, config->stream.height, config->fullscreen);
+  #endif
+
+  if (config->viewonly) {
+    if (config->debug_level > 0)
+      printf("View-only mode enabled, no input will be sent to the host computer\n");
+  } else {
+    if (IS_EMBEDDED(system)) {
+      char* mapping_env = getenv("SDL_GAMECONTROLLERCONFIG");
+      if (config->mapping == NULL && mapping_env == NULL) {
+        fprintf(stderr, "Please specify mapping file as default mapping could not be found.\n");
+        exit(-1);
+      }
+
+      struct mapping* mappings = NULL;
+      if (config->mapping != NULL)
+        mappings = mapping_load(config->mapping, config->debug_level > 0);
+
+      if (mapping_env != NULL) {
+        struct mapping* map = mapping_parse(mapping_env);
+        map->next = mappings;
+        mappings = map;
+      }
+
+      for (int i=0;i<config->inputsCount;i++) {
+        if (config->debug_level > 0)
+          printf("Adding input device %s...\n", config->inputs[i]);
+
+        evdev_create(config->inputs[i], mappings, config->debug_level > 0, config->rotate);
+      }
+
+      udev_init(!inputAdded, mappings, config->debug_level > 0, config->rotate);
+      evdev_init(config->mouse_emulation);
+      rumble_handler = evdev_rumble;
+      #ifdef HAVE_LIBCEC
+      cec_init();
+      #endif /* HAVE_LIBCEC */
+    }
+    #ifdef HAVE_SDL
+    else if (system == SDL) {
+      if (config->inputsCount > 0) {
+        fprintf(stderr, "You can't select input devices as SDL will automatically use all available controllers\n");
+        exit(-1);
+      }
+
+      sdlinput_init(config->mapping);
+      rumble_handler = sdlinput_rumble;
+      rumble_triggers_handler = sdlinput_rumble_triggers;
+      set_motion_event_state_handler = sdlinput_set_motion_event_state;
+      set_controller_led_handler = sdlinput_set_controller_led;
+    }
+    #endif
+  }
+
+  stream(server, config, system);
+}
+
+#ifdef HAVE_SDL
+// Teardown messages printed after the real error ("Stopping ...", "...done")
+static bool is_teardown_line(const char* line) {
+  size_t len = strlen(line);
+  return (len >= 3 && strcmp(line + len - 3, "...") == 0) || (len >= 7 && strcmp(line + len - 7, "...done") == 0);
+}
+
+// Streams in a child process so every session starts from a clean state and the
+// launcher can come back afterwards. Child output is copied to stdout; on failure
+// the last lines that explain the error end up in message.
+static void ui_stream(PSERVER_DATA server, PCONFIGURATION config, char* message, size_t message_size) {
+  message[0] = 0;
+
+  int fds[2];
+  if (pipe(fds) != 0) {
+    snprintf(message, message_size, "Can't start the stream: %s", strerror(errno));
+    return;
+  }
+
+  fflush(stdout);
+  fflush(stderr);
+  pid_t pid = fork();
+  if (pid < 0) {
+    snprintf(message, message_size, "Can't start the stream: %s", strerror(errno));
+    close(fds[0]);
+    close(fds[1]);
+    return;
+  } else if (pid == 0) {
+    close(fds[0]);
+    dup2(fds[1], STDOUT_FILENO);
+    dup2(fds[1], STDERR_FILENO);
+    close(fds[1]);
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    stream_session(server, config);
+    exit(0);
+  }
+
+  close(fds[1]);
+  FILE* output = fdopen(fds[0], "r");
+  char line[256];
+  char last[2][sizeof(line)] = {"", ""};
+  while (output != NULL && fgets(line, sizeof(line), output) != NULL) {
+    fputs(line, stdout);
+    fflush(stdout);
+    line[strcspn(line, "\n")] = 0;
+    if (line[0] != 0 && !is_teardown_line(line)) {
+      strcpy(last[0], last[1]);
+      strcpy(last[1], line);
+    }
+  }
+  if (output != NULL)
+    fclose(output);
+  else
+    close(fds[0]);
+
+  int status;
+  while (waitpid(pid, &status, 0) < 0 && errno == EINTR);
+  if (WIFSIGNALED(status))
+    snprintf(message, message_size, "The stream crashed (signal %d).\n%s", WTERMSIG(status), last[1]);
+  else if (WEXITSTATUS(status) != 0)
+    snprintf(message, message_size, "The stream ended with an error:\n%s%s%s", last[0], last[0][0] ? "\n" : "", last[1]);
+}
+
+static int ui_loop(PCONFIGURATION config) {
+  char message[600] = "";
+  bool first = true;
+  for (;;) {
+    SERVER_DATA server;
+    CONFIGURATION session = *config;
+    if (!ui_run(config, &session, &server, message[0] ? message : NULL, first))
+      return 0;
+
+    first = false;
+    ui_stream(&server, &session, message, sizeof(message));
+  }
+}
+#endif
+
 int main(int argc, char* argv[]) {
   CONFIGURATION config;
   config_parse(argc, argv, &config);
@@ -258,6 +433,15 @@ int main(int argc, char* argv[]) {
     evdev_create(config.inputs[0], NULL, config.debug_level > 0, config.rotate);
     evdev_map(config.inputs[0]);
     exit(0);
+  }
+
+  if (strcmp("ui", config.action) == 0) {
+    #ifdef HAVE_SDL
+    return ui_loop(&config);
+    #else
+    fprintf(stderr, "The launcher requires Moonlight to be compiled with SDL support\n");
+    exit(-1);
+    #endif
   }
 
   if (config.address == NULL) {
@@ -310,93 +494,7 @@ int main(int argc, char* argv[]) {
     pair_check(&server);
     applist(&server);
   } else if (strcmp("stream", config.action) == 0) {
-    pair_check(&server);
-    enum platform system = platform_check(config.platform);
-    if (config.debug_level > 0)
-      printf("Platform %s\n", platform_name(system));
-
-    if (system == 0) {
-      fprintf(stderr, "Platform '%s' not found\n", config.platform);
-      exit(-1);
-    } else if (system == SDL && config.audio_device != NULL) {
-      fprintf(stderr, "You can't select a audio device for SDL\n");
-      exit(-1);
-    }
-
-    config.stream.supportedVideoFormats = VIDEO_FORMAT_H264;
-    if (config.codec == CODEC_HEVC || (config.codec == CODEC_UNSPECIFIED && platform_prefers_codec(system, CODEC_HEVC))) {
-      config.stream.supportedVideoFormats |= VIDEO_FORMAT_H265;
-      if (config.hdr)
-        config.stream.supportedVideoFormats |= VIDEO_FORMAT_H265_MAIN10;
-    }
-    if (config.codec == CODEC_AV1 || (config.codec == CODEC_UNSPECIFIED && platform_prefers_codec(system, CODEC_AV1))) {
-      config.stream.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN8;
-      if (config.hdr)
-        config.stream.supportedVideoFormats |= VIDEO_FORMAT_AV1_MAIN10;
-    }
-
-    if (config.hdr && !(config.stream.supportedVideoFormats & VIDEO_FORMAT_MASK_10BIT)) {
-      fprintf(stderr, "HDR streaming requires HEVC or AV1 codec\n");
-      exit(-1);
-    }
-
-    #ifdef HAVE_SDL
-    if (system == SDL)
-      sdl_init(config.stream.width, config.stream.height, config.fullscreen);
-    #endif
-
-    if (config.viewonly) {
-      if (config.debug_level > 0)
-        printf("View-only mode enabled, no input will be sent to the host computer\n");
-    } else {
-      if (IS_EMBEDDED(system)) {
-        char* mapping_env = getenv("SDL_GAMECONTROLLERCONFIG");
-        if (config.mapping == NULL && mapping_env == NULL) {
-          fprintf(stderr, "Please specify mapping file as default mapping could not be found.\n");
-          exit(-1);
-        }
-
-        struct mapping* mappings = NULL;
-        if (config.mapping != NULL)
-          mappings = mapping_load(config.mapping, config.debug_level > 0);
-
-        if (mapping_env != NULL) {
-          struct mapping* map = mapping_parse(mapping_env);
-          map->next = mappings;
-          mappings = map;
-        }
-
-        for (int i=0;i<config.inputsCount;i++) {
-          if (config.debug_level > 0)
-            printf("Adding input device %s...\n", config.inputs[i]);
-
-          evdev_create(config.inputs[i], mappings, config.debug_level > 0, config.rotate);
-        }
-
-        udev_init(!inputAdded, mappings, config.debug_level > 0, config.rotate);
-        evdev_init(config.mouse_emulation);
-        rumble_handler = evdev_rumble;
-        #ifdef HAVE_LIBCEC
-        cec_init();
-        #endif /* HAVE_LIBCEC */
-      }
-      #ifdef HAVE_SDL
-      else if (system == SDL) {
-        if (config.inputsCount > 0) {
-          fprintf(stderr, "You can't select input devices as SDL will automatically use all available controllers\n");
-          exit(-1);
-        }
-
-        sdlinput_init(config.mapping);
-        rumble_handler = sdlinput_rumble;
-        rumble_triggers_handler = sdlinput_rumble_triggers;
-        set_motion_event_state_handler = sdlinput_set_motion_event_state;
-        set_controller_led_handler = sdlinput_set_controller_led;
-      }
-      #endif
-    }
-
-    stream(&server, &config, system);
+    stream_session(&server, &config);
   } else if (strcmp("pair", config.action) == 0) {
     char pin[5];
     if (config.pin > 0 && config.pin <= 9999) {

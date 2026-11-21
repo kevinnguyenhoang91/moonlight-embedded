@@ -3,6 +3,10 @@
 Thanks to the [Moonlight Embedded](https://github.com/moonlight-stream/moonlight-embedded)
 developers and the [Sunshine](https://github.com/LizardByte/Sunshine) project.
 
+- Opens a launcher modelled on the Moonlight New port: **Settings / Play /
+  Connect** menu, on-screen PIN pairing, number pad for the PC's IP address,
+  app carousel, four animated themes and UI sounds. It comes back after every
+  stream.
 - Streams at the device's native resolution by default: 960x720 (4:3) on the
   MiniLoong Pocket 1, 720x720 on the Powkiddy RGB20SX.
 - Video is decoded in software (FFmpeg H.264) and drawn through the system SDL2;
@@ -61,61 +65,76 @@ folder (create `autoinstall` if missing):
 3. Exit PortMaster. **Moonlight Embedded** appears under **Ports** (restart or
    refresh the game list if not).
 
-### 5. Point it at your PC
+### 5. Connect and pair (first launch only)
 
-In `ports/moonlightembedded/` copy `moonlight.conf.default` to `moonlight.conf`
-and edit it:
+1. Launch **Ports → Moonlight Embedded**. The launcher first looks for your PC
+   on the network (mDNS).
+2. If it can't find it: **Connect → IP Address**, enter the PC's IP with the
+   number pad (e.g. `192.168.1.50`) and pick **Done**.
+3. **Connect → Pair**. The handheld shows **PIN 1234** (random 4 digits).
+4. On the PC open `https://localhost:47990` → **PIN**, select the pending
+   request, enter the PIN and a device name (e.g. `Pocket1`), submit. The
+   handheld reports "Paired" and lists the PC's apps.
 
-```
-# your PC's IP (remove the leading # from the address line)
-address = 192.168.1.50
-# exact app name in Sunshine
-app = Desktop
-```
+### 6. Play
 
-Default Sunshine apps: `Desktop`, `Low Res Desktop`, `Steam Big Picture`.
-If you skip this step, the first launch creates `moonlight.conf` and tries mDNS
-auto-discovery; if that fails it tells you to set `address`.
-
-### 6. Pair (first launch only)
-
-1. Launch **Ports → Moonlight Embedded**.
-2. The handheld shows **PIN: 1234** (random 4 digits).
-3. On the PC open `https://localhost:47990` → **PIN**, select the pending
-   request, enter the PIN and a device name (e.g. `Pocket1`), submit.
-4. The handheld reports "Paired" and the stream starts.
-
-Later launches go straight to the stream.
+**Play**, pick an app with left/right (default Sunshine apps: `Desktop`,
+`Low Res Desktop`, `Steam Big Picture`) and press A. When the stream ends you
+are back in the launcher.
 
 ## Controls
+
+Launcher:
+
+| Button | Action |
+|--|--|
+| D-pad / left stick | Navigate; up/down changes a setting |
+| A | Select |
+| B | Back / skip the splash screen |
+| Y | Reload apps (Play) / delete (number pad) |
+| Start | Done (number pad) |
+| L1 + R1 | Quit the launcher |
+
+Stream:
 
 | Button | Action |
 |--|--|
 | All buttons and sticks | Sent to the PC as an Xbox controller |
-| Start + Select + L1 + R1 | Quit the stream |
+| Start + Select + L1 + R1 | Quit the stream (back to the launcher) |
 
-## Settings (`moonlightembedded/moonlight.conf`)
+## Settings
+
+Launcher **Settings** (saved in `moonlightembedded/keys/launcher.conf`):
 
 | Setting | Meaning |
 |--|--|
-| `address = …` | PC IP or hostname; unset = mDNS auto-discovery |
-| `app = Desktop` | App to launch, exactly as named in Sunshine |
-| `fps = 60` | Frame rate |
-| `bitrate = 8000` | kbps; lower if Wi-Fi stutters (default ≈10000 at 960x720/60) |
-| `codec = h264` | Keep: cheapest to decode in software on RK3566 |
-| `960x720 = true` or `width`/`height` | Override the native resolution (on the 720x720 RGB20SX, 960x720 gets stretched) |
-| `quitappafter = true` | Close the app on the PC when the stream ends |
+| Resolution | Native = the panel's resolution; on the 720x720 RGB20SX, 4:3 sizes get stretched |
+| Bitrate | Auto = `bitrate` from `moonlight.conf`, else ≈10000 kbps at 960x720/60; lower if Wi-Fi stutters |
+| Framerate | Frames per second |
+| Codec | Keep H.264: cheapest to decode in software on RK3566 |
+| Remote | Optimizations for streaming over the internet |
+| Sound FX / Theme | Launcher sounds and background |
 
-`moonlight.conf` and the pairing keys survive port updates; only
+`moonlightembedded/moonlight.conf` holds the defaults and options the launcher
+doesn't show:
+
+| Setting | Meaning |
+|--|--|
+| `quitappafter = true` | Close the app on the PC when the stream ends |
+| `localaudio = true` | Play audio on the PC instead of the handheld |
+| `address`, `width`/`height`, `fps`, `bitrate`, `codec` | Initial launcher values until changed in the launcher |
+
+`moonlight.conf`, `launcher.conf` and the pairing keys survive port updates; only
 `moonlight.conf.default` is overwritten.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |--|--|
-| "Could not reach …" | Check `address`, that Sunshine is running, and the PC firewall |
-| "App … not found" | The message lists the PC's apps; copy one into `app =` exactly |
-| Pairing failed | Re-launch and enter the newly shown PIN; select the right pending request |
+| "Can't connect to …" | Check the IP address, that Sunshine is running, and the PC firewall |
+| "No PC found on the network" | Set the IP in **Connect → IP Address** |
+| Pairing failed | **Connect → Pair** again and enter the newly shown PIN |
+| "The stream ended with an error" | The message shows the reason; try a lower bitrate or resolution |
 | Re-pair from scratch | Delete `ports/moonlightembedded/keys/` and unpair the device in Sunshine |
 | Anything else | See `ports/moonlightembedded/log.txt` |
 
