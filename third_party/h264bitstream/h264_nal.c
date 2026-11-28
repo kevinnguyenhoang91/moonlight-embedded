@@ -98,32 +98,35 @@ int find_nal_unit(uint8_t* buf, int size, int* nal_start, int* nal_end)
     
     i = 0;
     while (   //( next_bits( 24 ) != 0x000001 && next_bits( 32 ) != 0x00000001 )
+        (i + 2 < size) &&
         (buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0x01) && 
-        (buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0 || buf[i+3] != 0x01) 
+        (i + 3 >= size || buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0 || buf[i+3] != 0x01) 
         )
     {
         i++; // skip leading zero
-        if (i+4 >= size) { return 0; } // did not find nal start
     }
+
+    if (i + 2 >= size) { return 0; } // did not find nal start
 
     if  (buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0x01) // ( next_bits( 24 ) != 0x000001 )
     {
         i++;
     }
 
-    if  (buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0x01) { /* error, should never happen */ return 0; }
+    if  (i + 2 >= size || buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0x01) { /* error, should never happen */ return 0; }
     i+= 3;
     *nal_start = i;
     
     while (   //( next_bits( 24 ) != 0x000000 && next_bits( 24 ) != 0x000001 )
+        (i + 2 < size) &&
         (buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0) && 
         (buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0x01) 
         )
     {
         i++;
-        // FIXME the next line fails when reading a nal that ends exactly at the end of the data
-        if (i+3 >= size) { *nal_end = size; return -1; } // did not find nal end, stream ended first
     }
+
+    if (i + 2 >= size) { *nal_end = size; return (*nal_end - *nal_start); } // nal ends at the end of the data
     
     *nal_end = i;
     return (*nal_end - *nal_start);
