@@ -385,12 +385,12 @@ int nal_to_rbsp(const uint8_t* nal_buf, int* nal_size, uint8_t* rbsp_buf, int* r
 int read_nal_unit(h264_stream_t* h, uint8_t* buf, int size);
 int peek_nal_unit(h264_stream_t* h, uint8_t* buf, int size);
 
-void read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
+int read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
 void read_scaling_list(bs_t* b, int* scalingList, int sizeOfScalingList, int* useDefaultScalingMatrixFlag );
 void read_vui_parameters(h264_stream_t* h, bs_t* b);
 void read_hrd_parameters(h264_stream_t* h, bs_t* b);
 
-void read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
+int read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
 
 void read_sei_rbsp(h264_stream_t* h, bs_t* b);
 void read_sei_message(h264_stream_t* h, bs_t* b);
@@ -399,10 +399,10 @@ void read_end_of_seq_rbsp(h264_stream_t* h, bs_t* b);
 void read_end_of_stream_rbsp(h264_stream_t* h, bs_t* b);
 void read_filler_data_rbsp(h264_stream_t* h, bs_t* b);
 
-void read_slice_layer_rbsp(h264_stream_t* h, bs_t* b);
+int read_slice_layer_rbsp(h264_stream_t* h, bs_t* b);
 void read_rbsp_slice_trailing_bits(h264_stream_t* h, bs_t* b);
 void read_rbsp_trailing_bits(h264_stream_t* h, bs_t* b);
-void read_slice_header(h264_stream_t* h, bs_t* b);
+int read_slice_header(h264_stream_t* h, bs_t* b);
 void read_ref_pic_list_reordering(h264_stream_t* h, bs_t* b);
 void read_pred_weight_table(h264_stream_t* h, bs_t* b);
 void read_dec_ref_pic_marking(h264_stream_t* h, bs_t* b);
