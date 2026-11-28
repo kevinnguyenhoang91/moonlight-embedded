@@ -122,21 +122,21 @@ void debug_bytes(uint8_t* buf, int len)
 
 
 
-void read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
+int read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
 void read_scaling_list(bs_t* b, int* scalingList, int sizeOfScalingList, int* useDefaultScalingMatrixFlag );
 void read_vui_parameters(h264_stream_t* h, bs_t* b);
 void read_hrd_parameters(h264_stream_t* h, bs_t* b);
-void read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
+int read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b);
 void read_sei_rbsp(h264_stream_t* h, bs_t* b);
 void read_sei_message(h264_stream_t* h, bs_t* b);
 void read_access_unit_delimiter_rbsp(h264_stream_t* h, bs_t* b);
 void read_end_of_seq_rbsp(h264_stream_t* h, bs_t* b);
 void read_end_of_stream_rbsp(h264_stream_t* h, bs_t* b);
 void read_filler_data_rbsp(h264_stream_t* h, bs_t* b);
-void read_slice_layer_rbsp(h264_stream_t* h,  bs_t* b);
+int read_slice_layer_rbsp(h264_stream_t* h,  bs_t* b);
 void read_rbsp_slice_trailing_bits(h264_stream_t* h, bs_t* b);
 void read_rbsp_trailing_bits(h264_stream_t* h, bs_t* b);
-void read_slice_header(h264_stream_t* h, bs_t* b);
+int read_slice_header(h264_stream_t* h, bs_t* b);
 void read_ref_pic_list_reordering(h264_stream_t* h, bs_t* b);
 void read_pred_weight_table(h264_stream_t* h, bs_t* b);
 void read_dec_ref_pic_marking(h264_stream_t* h, bs_t* b);
@@ -169,12 +169,13 @@ int read_nal_unit(h264_stream_t* h, uint8_t* buf, int size)
     nal->nal_ref_idc = bs_read_u(b, 2);
     nal->nal_unit_type = bs_read_u(b, 5);
 
+    int rc = 0;
     switch ( nal->nal_unit_type )
     {
         case NAL_UNIT_TYPE_CODED_SLICE_IDR:
         case NAL_UNIT_TYPE_CODED_SLICE_NON_IDR:  
         case NAL_UNIT_TYPE_CODED_SLICE_AUX:
-            read_slice_layer_rbsp(h, b);
+            rc = read_slice_layer_rbsp(h, b);
             break;
 
 #ifdef HAVE_SEI
@@ -184,11 +185,11 @@ int read_nal_unit(h264_stream_t* h, uint8_t* buf, int size)
 #endif
 
         case NAL_UNIT_TYPE_SPS: 
-            read_seq_parameter_set_rbsp(h, b); 
+            rc = read_seq_parameter_set_rbsp(h, b); 
             break;
 
         case NAL_UNIT_TYPE_PPS:   
-            read_pic_parameter_set_rbsp(h, b);
+            rc = read_pic_parameter_set_rbsp(h, b);
             break;
 
         case NAL_UNIT_TYPE_AUD:     
@@ -213,7 +214,7 @@ int read_nal_unit(h264_stream_t* h, uint8_t* buf, int size)
             return -1;
     }
 
-    if (bs_overrun(b)) { bs_free(b); free(rbsp_buf); return -1; }
+    if (rc < 0 || bs_overrun(b)) { bs_free(b); free(rbsp_buf); return -1; }
 
     if( 0 )
     {
@@ -233,7 +234,7 @@ int read_nal_unit(h264_stream_t* h, uint8_t* buf, int size)
 
 
 //7.3.2.1 Sequence parameter set RBSP syntax
-void read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
+int read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
 {
     int i;
 
@@ -254,6 +255,7 @@ void read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
     /* reserved_zero_2bits */ bs_skip_u(b, 2);
     sps->level_idc = bs_read_u8(b);
     sps->seq_parameter_set_id = bs_read_ue(b);
+    if( sps->seq_parameter_set_id < 0 || sps->seq_parameter_set_id >= 32 ) { return -1; }
 
     if( sps->profile_idc == 100 || sps->profile_idc == 110 ||
         sps->profile_idc == 122 || sps->profile_idc == 144 )
@@ -300,6 +302,10 @@ void read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
         sps->offset_for_non_ref_pic = bs_read_se(b);
         sps->offset_for_top_to_bottom_field = bs_read_se(b);
         sps->num_ref_frames_in_pic_order_cnt_cycle = bs_read_ue(b);
+        if (sps->num_ref_frames_in_pic_order_cnt_cycle > 256)
+        {
+            sps->num_ref_frames_in_pic_order_cnt_cycle = 256;
+        }
         for( i = 0; i < sps->num_ref_frames_in_pic_order_cnt_cycle; i++ )
         {
             sps->offset_for_ref_frame[ i ] = bs_read_se(b);
@@ -334,6 +340,7 @@ void read_seq_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
     {
         memcpy(h->sps_table[sps->seq_parameter_set_id], h->sps, sizeof(sps_t));
     }
+    return 0;
 }
 
 
@@ -452,6 +459,10 @@ void read_hrd_parameters(h264_stream_t* h, bs_t* b)
     sps_t* sps = h->sps;
 
     sps->hrd.cpb_cnt_minus1 = bs_read_ue(b);
+    if (sps->hrd.cpb_cnt_minus1 > 31)
+    {
+        sps->hrd.cpb_cnt_minus1 = 31;
+    }
     sps->hrd.bit_rate_scale = bs_read_u(b, 4);
     sps->hrd.cpb_size_scale = bs_read_u(b, 4);
     for( int SchedSelIdx = 0; SchedSelIdx <= sps->hrd.cpb_cnt_minus1; SchedSelIdx++ )
@@ -485,7 +496,7 @@ int read_seq_parameter_set_extension_rbsp(bs_t* b, sps_ext_t* sps_ext) {
 */
 
 //7.3.2.2 Picture parameter set RBSP syntax
-void read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
+int read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
 {
     pps_t* pps = h->pps;
     if( 1 )
@@ -495,6 +506,8 @@ void read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
 
     pps->pic_parameter_set_id = bs_read_ue(b);
     pps->seq_parameter_set_id = bs_read_ue(b);
+    if( pps->pic_parameter_set_id < 0 || pps->pic_parameter_set_id >= 256 ) { return -1; }
+    if( pps->seq_parameter_set_id < 0 || pps->seq_parameter_set_id >= 32 ) { return -1; }
     pps->entropy_coding_mode_flag = bs_read_u1(b);
     pps->pic_order_present_flag = bs_read_u1(b);
     pps->num_slice_groups_minus1 = bs_read_ue(b);
@@ -584,6 +597,7 @@ void read_pic_parameter_set_rbsp(h264_stream_t* h, bs_t* b)
     {
         memcpy(h->pps, h->pps_table[pps->pic_parameter_set_id], sizeof(pps_t));
     }
+    return 0;
 }
 
 #ifdef HAVE_SEI
@@ -666,9 +680,9 @@ void read_filler_data_rbsp(h264_stream_t* h, bs_t* b)
 }
 
 //7.3.2.8 Slice layer without partitioning RBSP syntax
-void read_slice_layer_rbsp(h264_stream_t* h,  bs_t* b)
+int read_slice_layer_rbsp(h264_stream_t* h,  bs_t* b)
 {
-    read_slice_header(h, b);
+    if (read_slice_header(h, b) < 0) { return -1; }
     slice_data_rbsp_t* slice_data = h->slice_data;
 
     if ( slice_data != NULL )
@@ -680,12 +694,13 @@ void read_slice_layer_rbsp(h264_stream_t* h,  bs_t* b)
         slice_data->rbsp_buf = (uint8_t*)malloc(slice_data->rbsp_size);
         memcpy( slice_data->rbsp_buf, sptr, slice_data->rbsp_size );
         // ugly hack: since next NALU starts at byte border, we are going to be padded by trailing_bits;
-        return;
+        return 0;
     }
 
     // FIXME should read or skip data
     //slice_data( ); /* all categories of slice_data( ) syntax */
     read_rbsp_slice_trailing_bits(h, b);
+    return 0;
 }
 
 /*
@@ -742,7 +757,7 @@ void read_rbsp_trailing_bits(h264_stream_t* h, bs_t* b)
 }
 
 //7.3.3 Slice header syntax
-void read_slice_header(h264_stream_t* h, bs_t* b)
+int read_slice_header(h264_stream_t* h, bs_t* b)
 {
     slice_header_t* sh = h->sh;
     if( 1 )
@@ -759,6 +774,8 @@ void read_slice_header(h264_stream_t* h, bs_t* b)
     // TODO check existence, otherwise fail
     pps_t* pps = h->pps;
     sps_t* sps = h->sps;
+    if( sh->pic_parameter_set_id < 0 || sh->pic_parameter_set_id >= 256 ) { return -1; }
+    if( pps->seq_parameter_set_id < 0 || pps->seq_parameter_set_id >= 32 ) { return -1; }
     memcpy(h->pps_table[sh->pic_parameter_set_id], h->pps, sizeof(pps_t));
     memcpy(h->sps_table[pps->seq_parameter_set_id], h->sps, sizeof(sps_t));
 
@@ -849,6 +866,7 @@ void read_slice_header(h264_stream_t* h, bs_t* b)
         int v = intlog2( pps->pic_size_in_map_units_minus1 +  pps->slice_group_change_rate_minus1 + 1 );
         sh->slice_group_change_cycle = bs_read_u(b, v); // FIXME add 2?
     }
+    return 0;
 }
 
 //7.3.3.1 Reference picture list reordering syntax

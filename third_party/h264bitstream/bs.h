@@ -192,15 +192,19 @@ static inline uint32_t bs_read_u8(bs_t* b)
 
 static inline uint32_t bs_read_ue(bs_t* b)
 {
-    int32_t r = 0;
+    uint32_t r = 0;
     int i = 0;
 
-    while( (bs_read_u1(b) == 0) && (i < 32) && (!bs_eof(b)) )
+    while (!bs_eof(b) && (i < 32) && (bs_read_u1(b) == 0))
     {
         i++;
     }
+    if (i >= 32)
+    {
+        return 0;
+    }
     r = bs_read_u(b, i);
-    r += (1 << i) - 1;
+    r += (1U << i) - 1U;
     return r;
 }
 
