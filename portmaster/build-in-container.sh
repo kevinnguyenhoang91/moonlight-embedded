@@ -26,6 +26,8 @@ cmake -S "$SRC" -B "$BUILD/cmake" \
   -DCMAKE_SHARED_LINKER_FLAGS="-L/opt/deps/lib" \
   -DCURL_INCLUDE_DIR=/opt/deps/include \
   -DCURL_LIBRARY=/opt/deps/lib/libcurl.a \
+  -DOPENSSL_ROOT_DIR=/opt/deps \
+  -DOPENSSL_USE_STATIC_LIBS=TRUE \
   -DENABLE_X11=OFF -DENABLE_CEC=OFF -DENABLE_PULSE=OFF
 cmake --build "$BUILD/cmake" -j"$(nproc)" --target moonlight
 
@@ -36,10 +38,11 @@ mv "$STAGE/port.json" "$STAGE/gameinfo.xml" "$PORTDIR/"
 install -m755 "$BUILD/cmake/moonlight" "$PORTDIR/moonlight.aarch64"
 
 # Bundled libraries: our own, plus those not guaranteed on every CFW
-# (OpenSSL 1.1, Opus, Avahi client). Everything else comes from the device.
+# (Opus, Avahi client). OpenSSL is linked statically into libgamestream.
+# Everything else comes from the device.
 install -m644 "$BUILD/cmake/libgamestream/libgamestream.so.4" "$LIBDIR/"
 install -m644 "$BUILD/cmake/libgamestream/libmoonlight-common.so.4" "$LIBDIR/"
-for lib in libssl.so.1.1 libcrypto.so.1.1 libopus.so.0 libavahi-client.so.3 libavahi-common.so.3; do
+for lib in libopus.so.0 libavahi-client.so.3 libavahi-common.so.3; do
   install -m644 "$(readlink -f "$SYSLIB/$lib")" "$LIBDIR/$lib"
 done
 $STRIP --strip-unneeded "$PORTDIR/moonlight.aarch64" "$LIBDIR"/*.so*
@@ -67,7 +70,7 @@ done | sort -uV | tail -n 1
 cp "$SRC/LICENSE" "$PORTDIR/licenses/LICENSE.moonlight-embedded.txt"
 cp "$SRC/third_party/moonlight-common-c/LICENSE.txt" "$PORTDIR/licenses/LICENSE.moonlight-common-c.txt"
 cp /opt/deps/share/licenses/* "$PORTDIR/licenses/"
-for pkg in libssl1.1 libopus0 libavahi-client3; do
+for pkg in libopus0 libavahi-client3; do
   cp "/usr/share/doc/$pkg/copyright" "$PORTDIR/licenses/LICENSE.$pkg.txt"
 done
 
